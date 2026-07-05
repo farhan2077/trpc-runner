@@ -303,9 +303,12 @@ describe("createTRPCRunnerManifest", () => {
       kind: "object",
       children: { ts: { kind: "number", optional: true } },
     });
-    const tsNode = (
-      manifest.procedures[0]?.input as { children: Record<string, unknown> }
-    ).children["ts"] as { defaultValue: unknown };
+    const procedure = manifest.procedures[0];
+    expect(procedure).toBeDefined();
+    const tsNode = (procedure!.input as { children: Record<string, unknown> })
+      .children["ts"] as {
+      defaultValue: unknown;
+    };
     expect(typeof tsNode.defaultValue).toBe("number");
   });
 
@@ -468,9 +471,10 @@ describe("createTRPCRunnerManifest", () => {
       test: t.procedure.input(z.object({ x: z.number() })).query(() => null),
     });
     const manifest = createTRPCRunnerManifest({ router, endpoint: "/trpc" });
-    const children = (
-      manifest.procedures[0]?.input as { children: Record<string, unknown> }
-    ).children;
+    const procedure = manifest.procedures[0];
+    expect(procedure).toBeDefined();
+    const children = (procedure!.input as { children: Record<string, unknown> })
+      .children;
     expect(children["x"]).toMatchObject({ label: "x", path: ["x"] });
   });
 
