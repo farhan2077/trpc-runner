@@ -1,0 +1,6 @@
+{
+  "plugins": ["typescript", "react"],
+  "rules": {
+    "no-explicit-any": "off"
+  }
+}
