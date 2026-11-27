@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import { initTRPC } from "@trpc/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { renderTRPCRunner } from "./render";
+import { renderTRPCRunner, renderTRPCRunnerPage } from "./render";
+import { loadClientAssets } from "./assets";
 import * as manifestModule from "./manifest";
 
 const t = initTRPC.create();
@@ -42,9 +43,7 @@ describe("renderTRPCRunner", () => {
       endpoint: "/trpc",
       title: "</script><script>alert(1)",
     });
-    const bootDataMatch = html.match(
-      /window\.__TRPC_RUNNER_DATA__\s*=\s*({.+?});/,
-    );
+    const bootDataMatch = html.match(/window\.__TRPC_RUNNER_DATA__\s*=\s*({.+?});/);
     expect(bootDataMatch).not.toBeNull();
     const bootData = bootDataMatch![1]!;
     expect(bootData).not.toContain("</script>");
@@ -87,23 +86,71 @@ describe("renderTRPCRunner", () => {
   });
 });
 
+describe("renderTRPCRunnerPage", () => {
+  const router = t.router({ ping: t.procedure.query(() => "pong" as const) });
+
+  it("links content-hashed assets under the base URL in external mode", () => {
+    const assets = loadClientAssets({ cache: false });
+    const html = renderTRPCRunnerPage(
+      { router, endpoint: "/trpc" },
+      { mode: "external", baseUrl: "./runner/assets/" },
+    );
+
+    expect(html).toContain(
+      `<link rel="stylesheet" href="./runner/assets/runner-${assets.css.hash}.css" />`,
+    );
+    expect(html).toContain(`<script src="./runner/assets/runner-${assets.js.hash}.js"></script>`);
+    expect(html).toContain("<script>window.__TRPC_RUNNER_DATA__");
+    expect(html).not.toContain("<style>");
+    expect(html.length).toBeLessThan(20_000);
+  });
+
+  it("escapes the base URL", () => {
+    const html = renderTRPCRunnerPage(
+      { router, endpoint: "/trpc" },
+      { mode: "external", baseUrl: './a"b<c/assets/' },
+    );
+
+    expect(html).toContain('href="./a&quot;b&lt;c/assets/runner-');
+    expect(html).not.toContain('./a"b');
+  });
+
+  it("inlines the same assets in inline mode", () => {
+    const assets = loadClientAssets({ cache: false });
+    const html = renderTRPCRunnerPage({ router, endpoint: "/trpc" }, { mode: "inline" });
+
+    expect(html).toContain(`<style>${assets.css.text}</style>`);
+    expect(html).not.toContain(assets.js.fileName);
+  });
+});
+
 describe("renderTRPCRunner cache behavior", () => {
   const router = t.router({ ping: t.procedure.query(() => "pong" as const) });
 
   it("returns cached HTML on second call when cache is enabled", () => {
-    const first = renderTRPCRunner({
-      router,
-      endpoint: "/trpc",
-      title: "CacheTest",
-      cache: true,
-    });
-    const second = renderTRPCRunner({
-      router,
-      endpoint: "/trpc",
-      title: "CacheTest",
-      cache: true,
-    });
+    const options = { router, endpoint: "/trpc", title: "CacheTest", cache: true };
+    const spy = vi.spyOn(manifestModule, "createTRPCRunnerManifest");
+    const first = renderTRPCRunner(options);
+    const second = renderTRPCRunner(options);
     expect(second).toBe(first);
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+  });
+
+  it("keeps a separate cache for each runner", () => {
+    const otherRouter = t.router({ other: t.procedure.query(() => "other" as const) });
+    const first = renderTRPCRunner({ router, endpoint: "/trpc", title: "First", cache: true });
+    const second = renderTRPCRunner({
+      router: otherRouter,
+      endpoint: "/other-trpc",
+      title: "Second",
+      cache: true,
+    });
+    expect(first).toContain("<title>First</title>");
+    expect(second).toContain("<title>Second</title>");
+    expect(second).toContain("/other-trpc");
+    expect(second).toContain('"pathLabel":"other"');
+    expect(second).not.toContain('"pathLabel":"ping"');
   });
 
   it("does not cache HTML when cache is disabled", () => {

@@ -2,7 +2,7 @@
 
 Backend-mounted tRPC procedure runner with a bundled React UI.
 
-`trpc-runner` lets an Express/tRPC backend expose an internal procedure runner at a route such as `/runner`. The runner serves a complete HTML page from the backend route, with the client CSS and JavaScript already bundled into the package.
+`trpc-runner` lets an Express/tRPC backend expose an internal procedure runner at a route such as `/runner`. The middleware serves the runner page and its client CSS and JavaScript, which are already bundled into the package.
 
 Consumers do not need to configure Tailwind, shadcn, Vite, React, or any app-level CSS setup.
 
@@ -15,7 +15,8 @@ Consumers do not need to configure Tailwind, shadcn, Vite, React, or any app-lev
 - Edit raw JSON and inspect responses with a Monaco-backed JSON editor.
 - Browse input and output schema docs, including observed output shapes after successful runs when no output parser is configured.
 - Keep multiple procedures open in URL-backed tabs.
-- Store auth headers, theme, layout, and successful input history locally in the browser.
+- Store auth headers, theme, layout, and successful input history locally in the browser. Headers and history are scoped to each runner (page path, endpoint, and title), so different projects on the same host and port do not share them.
+- Works offline: the Monaco editor, its workers, and the Inter/JetBrains Mono fonts are bundled into the page instead of loaded from a CDN.
 - Use light or dark mode.
 
 ## Getting Started
@@ -43,7 +44,17 @@ app.use(
 
 Visit `http://localhost:<port>/runner` to inspect and run procedures.
 
-The middleware responds to `GET /` for the mounted route and passes other methods or nested paths to the next middleware.
+The middleware responds to `GET /` for the mounted route with the runner page, and to `GET /assets/runner-<hash>.js` and `.css` with the client bundle (about 1.3 MB with Brotli). Asset URLs contain a content hash and are cached by the browser indefinitely, so only the first visit after an upgrade downloads them. Responses are Brotli- or gzip-compressed when the browser supports it, without a separate compression middleware. Other methods and paths are passed to the next middleware.
+
+To render the page outside Express, `renderTRPCRunner(options)` from `trpc-runner/server` returns a single self-contained HTML page with the assets inlined (about 5.5 MB uncompressed).
+
+## Security
+
+The runner page lists every procedure it can see, with input and output schemas, and lets anyone who can open it call them. Treat it like an admin tool:
+
+- Mount it only in development or behind your own authentication, for example `if (process.env.NODE_ENV !== "production") app.use("/runner", ...)`.
+- Use `include`/`exclude` to hide procedures that should not be listed.
+- Auth headers entered in the runner are stored in the browser's local storage for that runner.
 
 ## Options
 
@@ -67,7 +78,7 @@ type TRPCRunnerOptions = {
 - `title`: page title and runner title metadata. Defaults to `tRPC Runner`.
 - `description`: optional runner description metadata.
 - `transformer`: set to `"superjson"` when the tRPC endpoint uses SuperJSON.
-- `cache`: cache generated HTML and built client assets between requests.
+- `cache`: cache the generated router manifest and the built client assets between requests. Each mounted runner keeps its own manifest. Assets are always kept in memory in production.
 - `include`: only show matching procedure paths. Supports exact paths and trailing `*` prefixes.
 - `exclude`: hide matching procedure paths. Supports exact paths and trailing `*` prefixes.
 - `logParseWarnings`: log schema/procedure parse warnings to the server console.
@@ -92,25 +103,26 @@ app.use(
 
 ## Schema Support
 
-The generated form and docs currently inspect Zod-like schemas from tRPC procedure inputs and outputs. Supported metadata includes:
+The generated form and docs inspect Zod 3 and Zod 4 schemas from tRPC procedure inputs and outputs. Supported metadata includes:
 
 - Objects
 - Arrays
 - Strings
-- Numbers and bigints
+- Numbers
+- BigInts (edited as whole-number strings and sent as `BigInt` with `transformer: "superjson"`; without superjson they are sent as strings, so use `z.coerce.bigint()`)
 - Booleans
 - Enums and native enums
-- Literals
+- Literals, including Zod 4 multi-value literals
 - Any and unknown
 - Optional fields
 - Nullable fields
 - Default values
 - Descriptions
-- Effects
-- Branded wrappers
-- Readonly wrappers
+- Effects, pipes, and Zod 4 transforms (the form uses the input side)
+- Branded, readonly, and catch wrappers
+- Chained `.input()` object schemas, merged into one form
 
-Unsupported input shapes remain runnable through the Raw JSON tab. Subscriptions are discovered and labeled but are not runnable yet.
+Unsupported input shapes, such as dates, unions, records, tuples, and numeric TypeScript enums, remain runnable through the Raw JSON tab. Subscriptions are discovered and labeled but are not runnable yet.
 
 ## Local Development
 

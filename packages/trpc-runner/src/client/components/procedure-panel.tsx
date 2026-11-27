@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createTRPCUntypedClient, httpBatchLink } from "@trpc/client";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { InformationCircleIcon, PlayIcon } from "@hugeicons/core-free-icons";
@@ -18,6 +18,7 @@ import {
   stringifyJson,
   cleanHeaders,
   normalizeError,
+  prepareRequestInput,
   validateRequiredInput,
 } from "@/lib/helpers";
 import type { RunnerProcedure, RunnerTheme } from "../../types";
@@ -26,6 +27,7 @@ const procedureModeTabClassName =
   "h-10 flex-none bg-transparent data-active:border-transparent data-active:bg-transparent font-regular data-active:shadow-none! dark:data-active:border-transparent dark:data-active:bg-transparent text-muted-foreground/80";
 const procedureModeTabs = ["body", "raw", "history", "docs"] as const;
 const invalidInput = Symbol("invalid-input");
+const usesSuperjson = window.__TRPC_RUNNER_DATA__.options.transformer === "superjson";
 type ProcedureModeTab = (typeof procedureModeTabs)[number];
 
 function isProcedureModeTab(value: string): value is ProcedureModeTab {
@@ -51,25 +53,42 @@ export function ProcedurePanel({
   onHistoryClear: () => void;
   onResponse: (response: ResponseState) => void;
 }) {
-  const [tab, setTab] = useState<ProcedureModeTab>(
-    procedure.inputUnsupported ? "raw" : "body",
-  );
+  const [tab, setTab] = useState<ProcedureModeTab>(procedure.inputUnsupported ? "raw" : "body");
   const [input, setInput] = useState(() => defaultValueForNode(procedure.input));
   const [rawInput, setRawInput] = useState(() =>
     stringifyJson(defaultValueForNode(procedure.input)),
   );
   const [inputErrors, setInputErrors] = useState<Record<string, string>>({});
   const [rawInputError, setRawInputError] = useState<string | null>(null);
+  const latestRunIdRef = useRef(0);
   const description = procedure.description?.trim();
 
   function updateInput(next: unknown) {
-    setInput(next);
+    setFormInput(next);
     setRawInput(stringifyJson(next));
+  }
+
+  function setFormInput(next: unknown) {
+    setInput(next);
     setInputErrors((currentErrors) =>
       Object.keys(currentErrors).length > 0
         ? validateRequiredInput(procedure.input, next)
         : currentErrors,
     );
+  }
+
+  function updateRawInput(nextRawInput: string) {
+    setRawInput(nextRawInput);
+    setRawInputError(null);
+    if (procedure.inputUnsupported) return;
+
+    // Keep the generated form in sync with valid raw edits, so switching back to the
+    // Body tab shows what Raw JSON would send.
+    try {
+      setFormInput(JSON.parse(nextRawInput || "null"));
+    } catch {
+      // Ignore incomplete JSON while the user is typing; Run reports parse errors.
+    }
   }
 
   function updateTab(nextTab: string) {
@@ -84,6 +103,14 @@ export function ProcedurePanel({
     const parsedInput = tab === "raw" ? parseRawInput(rawInput) : validateBodyInput();
     if (parsedInput === invalidInput) return;
 
+    const requestInput = procedure.inputUnsupported
+      ? parsedInput
+      : prepareRequestInput(procedure.input, parsedInput, { superjson: usesSuperjson });
+    // Only the most recent run may update the response, so a slow earlier request
+    // cannot overwrite a newer result.
+    const runId = ++latestRunIdRef.current;
+    const isLatestRun = () => runId === latestRunIdRef.current;
+
     onResponse({ state: "loading", startedAt: performance.now() });
     const started = performance.now();
     try {
@@ -92,26 +119,25 @@ export function ProcedurePanel({
           httpBatchLink({
             url: window.__TRPC_RUNNER_DATA__.options.endpoint,
             headers: () => cleanHeaders(headers),
-            transformer:
-              window.__TRPC_RUNNER_DATA__.options.transformer === "superjson"
-                ? superjson
-                : undefined,
+            transformer: usesSuperjson ? superjson : undefined,
           } as any),
         ],
       });
       const data =
         procedure.kind === "query"
-          ? await client.query(procedure.pathLabel, parsedInput)
-          : await client.mutation(procedure.pathLabel, parsedInput);
+          ? await client.query(procedure.pathLabel, requestInput)
+          : await client.mutation(procedure.pathLabel, requestInput);
       const durationMs = Math.round(performance.now() - started);
       onHistoryAdd(parsedInput);
+      if (!isLatestRun()) return;
       onResponse({
         state: "success",
         data,
         durationMs,
-        sizeBytes: new Blob([stringifyJson(data)]).size,
+        sizeBytes: new Blob([stringifyJson(data) ?? ""]).size,
       });
     } catch (error) {
+      if (!isLatestRun()) return;
       const durationMs = Math.round(performance.now() - started);
       onResponse({
         state: "error",
@@ -205,10 +231,7 @@ export function ProcedurePanel({
           <TabsContent value="raw" className="flex h-full min-h-0 flex-col -mx-1">
             <JsonEditor
               value={rawInput}
-              onChange={(nextRawInput) => {
-                setRawInput(nextRawInput);
-                setRawInputError(null);
-              }}
+              onChange={updateRawInput}
               theme={theme}
               className="min-h-0 flex-1"
             />

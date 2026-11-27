@@ -60,7 +60,56 @@ function collectRequiredErrors(
 
   if (isMissingRequiredValue(node, value)) {
     errors[inputPathKey(node)] = "Required";
+    return;
   }
+
+  if (
+    node.kind === "bigint" &&
+    typeof value === "string" &&
+    value !== "" &&
+    !isBigIntString(value)
+  ) {
+    errors[inputPathKey(node)] = "Must be a whole number";
+  }
+}
+
+const bigIntPattern = /^-?\d+$/;
+
+export function isBigIntString(value: string) {
+  return bigIntPattern.test(value.trim());
+}
+
+/**
+ * Converts form/raw input into the value sent to tRPC. BigInt fields are edited as
+ * decimal strings (so history stays JSON-serializable) and become real `BigInt`s
+ * only when superjson can carry them over the wire.
+ */
+export function prepareRequestInput(
+  node: RunnerInputNode,
+  value: unknown,
+  options: { superjson: boolean },
+): unknown {
+  if (node.kind === "bigint") {
+    if (!options.superjson) return value;
+    if (typeof value === "string" && isBigIntString(value)) return BigInt(value.trim());
+    if (typeof value === "number" && Number.isSafeInteger(value)) return BigInt(value);
+    return value;
+  }
+
+  if (node.kind === "object" && isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, childValue]) => {
+        const child = node.children[key];
+        return [key, child ? prepareRequestInput(child, childValue, options) : childValue];
+      }),
+    );
+  }
+
+  if (node.kind === "array" && Array.isArray(value)) {
+    return value.map((item) => prepareRequestInput(node.element, item, options));
+  }
+
+  return value;
 }
 
 function isMissingRequiredValue(node: RunnerInputNode, value: unknown) {
@@ -68,47 +117,54 @@ function isMissingRequiredValue(node: RunnerInputNode, value: unknown) {
   if (value === undefined) return true;
   if (value === null) return !node.nullable;
   if (node.kind === "string" || node.kind === "enum") return value === "";
-  if (node.kind === "number") return typeof value !== "number";
+  if (node.kind === "number") return typeof value !== "number" || Number.isNaN(value);
+  if (node.kind === "bigint") return typeof value !== "string" || value.trim() === "";
   if (node.kind === "boolean") return typeof value !== "boolean";
   return false;
 }
 
-export function flattenFields(
-  node: RunnerInputNode,
-): { path: string; kind: string; description?: string }[] {
-  if (node.kind === "object") {
-    return Object.entries(node.children).flatMap(([key, child]) =>
-      flattenFields(child).map((item) => ({
-        ...item,
-        path: item.path ? `${key}.${item.path}` : key,
-      })),
-    );
-  }
-  return [
-    {
-      path: node.path.map(String).join("."),
-      kind: node.kind,
-      description: node.description,
-    },
-  ];
+/**
+ * Pretty JSON for display. Handles values superjson can deserialize but JSON cannot
+ * represent: BigInt becomes `"123n"`, Map becomes an object (or entry list for
+ * non-string keys), and Set becomes an array.
+ */
+export function stringifyJson(value: unknown) {
+  return JSON.stringify(value, displayReplacer, 2);
 }
 
-export function stringifyJson(value: unknown) {
-  return JSON.stringify(value, null, 2);
+function displayReplacer(_key: string, value: unknown) {
+  if (typeof value === "bigint") return `${value.toString()}n`;
+  if (value instanceof Map) {
+    const entries = [...value.entries()];
+    return entries.every(([key]) => typeof key === "string")
+      ? Object.fromEntries(entries)
+      : entries;
+  }
+  if (value instanceof Set) return [...value];
+  return value;
 }
 
 export function cleanHeaders(headers: Record<string, string>) {
   return Object.fromEntries(Object.entries(headers).filter(([key]) => key.trim()));
 }
 
+/**
+ * Makes a thrown value displayable. For `TRPCClientError`s this keeps the server's
+ * error `data` (code, httpStatus, path, and any formatter output such as Zod issues),
+ * falling back to the full error `shape` when a custom formatter omits `data`.
+ */
 export function normalizeError(error: unknown) {
   if (error instanceof Error) {
-    return {
+    const details: Record<string, unknown> = {
       name: error.name,
       message: error.message,
-      stack: error.stack,
-      cause: error.cause,
     };
+    const trpcError = error as Error & { data?: unknown; shape?: unknown };
+    if (trpcError.data !== undefined) details.data = trpcError.data;
+    else if (trpcError.shape !== undefined) details.shape = trpcError.shape;
+    if (error.cause !== undefined) details.cause = normalizeError(error.cause);
+    details.stack = error.stack;
+    return details;
   }
   return error;
 }

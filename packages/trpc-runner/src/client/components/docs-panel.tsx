@@ -103,6 +103,10 @@ function inferObservedNode(value: unknown, path: (string | number)[] = []): Runn
     return { kind: "number", path, label: String(path[path.length - 1] ?? "") };
   }
 
+  if (typeof value === "bigint") {
+    return { kind: "bigint", path, label: String(path[path.length - 1] ?? "") };
+  }
+
   if (typeof value === "boolean") {
     return { kind: "boolean", path, label: String(path[path.length - 1] ?? "") };
   }

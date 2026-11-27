@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -46,6 +46,74 @@ function FieldShell({
       {children}
     </div>
   );
+}
+
+/**
+ * Free-form JSON field for `z.any()`/`z.unknown()` values. The text is kept as a local
+ * draft so partially typed JSON is not rejected; only valid JSON updates the value.
+ * An empty field means `undefined`.
+ */
+function JsonValueField({
+  value,
+  error,
+  onChange,
+}: {
+  value: unknown;
+  error?: string;
+  onChange: (value: unknown) => void;
+}) {
+  const [draft, setDraft] = useState(() => formatJsonDraft(value));
+  const [parseError, setParseError] = useState<string | null>(null);
+  const lastEmittedRef = useRef<unknown>(value);
+
+  // Replace the draft when the value changes from outside this field (for example,
+  // a Raw JSON edit or an input history entry), but not for this field's own edits.
+  useEffect(() => {
+    if (value === lastEmittedRef.current) return;
+    lastEmittedRef.current = value;
+    setDraft(formatJsonDraft(value));
+    setParseError(null);
+  }, [value]);
+
+  function handleChange(nextDraft: string) {
+    setDraft(nextDraft);
+    if (nextDraft.trim() === "") {
+      setParseError(null);
+      lastEmittedRef.current = undefined;
+      onChange(undefined);
+      return;
+    }
+    try {
+      const parsed: unknown = JSON.parse(nextDraft);
+      setParseError(null);
+      lastEmittedRef.current = parsed;
+      onChange(parsed);
+    } catch {
+      setParseError("Invalid JSON");
+    }
+  }
+
+  const message = parseError ?? error;
+  return (
+    <div className="grid gap-1.5">
+      <Textarea
+        aria-invalid={message ? true : undefined}
+        className="font-mono"
+        placeholder="JSON value"
+        value={draft}
+        onChange={(e) => handleChange(e.target.value)}
+      />
+      {message ? (
+        <p className="text-xs text-destructive" role="alert">
+          {message}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function formatJsonDraft(value: unknown) {
+  return value === undefined ? "" : (stringifyJson(value) ?? "");
 }
 
 export function FormNodeEditor({
@@ -174,6 +242,26 @@ export function FormNodeEditor({
     );
   }
 
+  if (node.kind === "bigint") {
+    return (
+      <div className="grid gap-1.5">
+        <Input
+          inputMode="numeric"
+          placeholder="0"
+          aria-invalid={error ? true : undefined}
+          className="font-mono"
+          value={typeof value === "string" ? value : value === undefined ? "" : String(value)}
+          onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)}
+        />
+        {error ? (
+          <p className="text-xs text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
   if (node.kind === "enum") {
     return (
       <div className="grid gap-1.5">
@@ -207,20 +295,7 @@ export function FormNodeEditor({
   }
 
   if (node.kind === "unknown") {
-    return (
-      <div className="grid gap-1.5">
-        <Textarea
-          aria-invalid={error ? true : undefined}
-          value={stringifyJson(value ?? null)}
-          onChange={(e) => onChange(JSON.parse(e.target.value || "null"))}
-        />
-        {error ? (
-          <p className="text-xs text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
-      </div>
-    );
+    return <JsonValueField value={value} error={error} onChange={onChange} />;
   }
 
   return (

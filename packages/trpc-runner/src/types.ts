@@ -59,6 +59,7 @@ export type RunnerInputNode =
   | RunnerArrayNode
   | RunnerStringNode
   | RunnerNumberNode
+  | RunnerBigIntNode
   | RunnerBooleanNode
   | RunnerEnumNode
   | RunnerLiteralNode
@@ -90,6 +91,11 @@ export type RunnerStringNode = RunnerBaseInputNode & {
 
 export type RunnerNumberNode = RunnerBaseInputNode & {
   kind: "number";
+};
+
+/** Edited as a decimal string in the form and sent as a `BigInt` when superjson is enabled. */
+export type RunnerBigIntNode = RunnerBaseInputNode & {
+  kind: "bigint";
 };
 
 export type RunnerBooleanNode = RunnerBaseInputNode & {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createParser, parseAsArrayOf, useQueryStates } from "nuqs";
-import { useLocalStorage } from "@/lib/hooks";
+import { getRunnerStorageKeys, useLocalStorage } from "@/lib/hooks";
 import { TreeNodeView } from "./components/tree-node-view";
 import { ProcedurePanel } from "./components/procedure-panel";
 import { ProcedureTabs } from "./components/procedure-tabs";
@@ -29,6 +29,10 @@ const SIDEBAR_COLLAPSED_SIZE = "2.25rem";
 const SIDEBAR_EXPANDED_MIN_SIZE = "16%";
 
 const boot = window.__TRPC_RUNNER_DATA__;
+const { headers: HEADERS_STORAGE_KEY, history: HISTORY_STORAGE_KEY } = getRunnerStorageKeys(
+  window.location.pathname,
+  boot,
+);
 const validProcedurePaths = new Set(
   boot.manifest.procedures.map((procedure) => procedure.pathLabel),
 );
@@ -40,7 +44,6 @@ const procedureTabsParsers = {
   activeTab: procedurePathParser.withDefault(""),
   openedTabs: parseAsArrayOf(procedurePathParser).withDefault([]),
 };
-const visibleSet = new Set(boot.manifest.procedures.map((procedure) => procedure.pathLabel));
 type ProcedureTabsState = {
   activeTab: string;
   openedTabs: string[];
@@ -55,9 +58,9 @@ export function App() {
     "trpc-runner.theme",
     boot.options.defaultTheme ?? "light",
   );
-  const [headers, setHeaders] = useLocalStorage<Record<string, string>>("trpc-runner.headers", {});
+  const [headers, setHeaders] = useLocalStorage<Record<string, string>>(HEADERS_STORAGE_KEY, {});
   const [inputHistory, setInputHistory] = useLocalStorage<Record<string, unknown[]>>(
-    "trpc-runner.history",
+    HISTORY_STORAGE_KEY,
     {},
   );
   const [procedureTabs, setProcedureTabs] = useQueryStates(procedureTabsParsers, {
@@ -302,7 +305,7 @@ export function App() {
               <ScrollArea className="flex-1">
                 <TreeNodeView
                   node={boot.manifest.tree}
-                  visibleSet={visibleSet}
+                  visibleSet={validProcedurePaths}
                   selectedPath={selectedPath}
                   onSelect={openProcedure}
                   root

@@ -5,8 +5,8 @@
   "scripts": {
     "build": "pnpm -r --filter trpc-runner... build",
     "lint": "oxlint packages/trpc-runner/src apps/example-server/src",
-    "format": "oxfmt --check README.md package.json pnpm-workspace.yaml tsconfig.base.json oxlint.json 'packages/trpc-runner/src/**/*.{ts,tsx,css}' packages/trpc-runner/package.json packages/trpc-runner/tsconfig.json packages/trpc-runner/tsdown.config.ts packages/trpc-runner/vite.client.config.ts 'apps/example-server/src/**/*.ts' apps/example-server/package.json apps/example-server/tsconfig.json",
-    "format:write": "oxfmt --write README.md package.json pnpm-workspace.yaml tsconfig.base.json oxlint.json 'packages/trpc-runner/src/**/*.{ts,tsx,css}' packages/trpc-runner/package.json packages/trpc-runner/tsconfig.json packages/trpc-runner/tsdown.config.ts packages/trpc-runner/vite.client.config.ts 'apps/example-server/src/**/*.ts' apps/example-server/package.json apps/example-server/tsconfig.json",
+    "format": "oxfmt --check README.md package.json pnpm-workspace.yaml tsconfig.base.json oxlint.json 'packages/trpc-runner/src/**/*.{ts,tsx,css}' packages/trpc-runner/package.json packages/trpc-runner/tsconfig.json packages/trpc-runner/tsdown.config.ts packages/trpc-runner/vite.client.config.ts packages/trpc-runner/vitest.config.ts packages/trpc-runner/vite.client.config.test.ts 'apps/example-server/src/**/*.ts' apps/example-server/package.json apps/example-server/tsconfig.json",
+    "format:write": "oxfmt --write README.md package.json pnpm-workspace.yaml tsconfig.base.json oxlint.json 'packages/trpc-runner/src/**/*.{ts,tsx,css}' packages/trpc-runner/package.json packages/trpc-runner/tsconfig.json packages/trpc-runner/tsdown.config.ts packages/trpc-runner/vite.client.config.ts packages/trpc-runner/vitest.config.ts packages/trpc-runner/vite.client.config.test.ts 'apps/example-server/src/**/*.ts' apps/example-server/package.json apps/example-server/tsconfig.json",
     "test": "pnpm -r test",
     "pack:local": "pnpm --filter trpc-runner pack --pack-destination /tmp/trpc-runner-pack"
   },

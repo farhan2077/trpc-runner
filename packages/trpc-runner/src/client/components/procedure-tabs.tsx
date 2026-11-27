@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type MouseEvent,
-  type PointerEvent,
-} from "react";
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 import { Cancel01Icon, Undo03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { RunnerProcedure } from "../../types";
@@ -28,11 +22,7 @@ function reorderPaths(paths: string[], fromIndex: number, dropIndex: number) {
 
   if (!movedPath) return paths;
 
-  nextPaths.splice(
-    dropIndex > fromIndex ? dropIndex - 1 : dropIndex,
-    0,
-    movedPath,
-  );
+  nextPaths.splice(dropIndex > fromIndex ? dropIndex - 1 : dropIndex, 0, movedPath);
   return nextPaths;
 }
 
@@ -140,8 +130,7 @@ export function ProcedureTabs({
   function updateDrag(event: PointerEvent<HTMLDivElement>) {
     if (!dragState || dragState.pointerId !== event.pointerId) return;
 
-    const shouldDrag =
-      dragState.dragging || Math.abs(event.clientX - dragState.startX) > 4;
+    const shouldDrag = dragState.dragging || Math.abs(event.clientX - dragState.startX) > 4;
 
     if (!shouldDrag) return;
 
@@ -163,11 +152,7 @@ export function ProcedureTabs({
     }
 
     if (dragState.dragging) {
-      const nextPaths = reorderPaths(
-        paths,
-        dragState.fromIndex,
-        dragState.dropIndex,
-      );
+      const nextPaths = reorderPaths(paths, dragState.fromIndex, dragState.dropIndex);
 
       suppressNextClickRef.current = true;
       if (nextPaths.join("\0") !== paths.join("\0")) {
@@ -253,12 +238,7 @@ export function ProcedureTabs({
               title={procedure.pathLabel}
             >
               <ProcedureBadge kind={procedure.kind} compact />
-              <span
-                className={cn(
-                  "truncate",
-                  dragging ? "cursor-grabbing" : "cursor-pointer",
-                )}
-              >
+              <span className={cn("truncate", dragging ? "cursor-grabbing" : "cursor-pointer")}>
                 {procedure.pathLabel}
               </span>
             </button>

@@ -55,12 +55,7 @@ function ShortcutKeys({ keys }: { keys: string[] }) {
   return (
     <KbdGroup className="gap-1">
       <Kbd>{keys[0]}</Kbd>
-      <HugeiconsIcon
-        icon={PlusSignIcon}
-        size={10}
-        className="text-foreground"
-        strokeWidth={2.5}
-      />
+      <HugeiconsIcon icon={PlusSignIcon} size={10} className="text-foreground" strokeWidth={2.5} />
       <Kbd>{keys[1]}</Kbd>
     </KbdGroup>
   );
@@ -96,14 +91,9 @@ function RunnerOptionsMenu({
           <DropdownMenuLabel>View</DropdownMenuLabel>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-              <HugeiconsIcon
-                icon={theme === "light" ? Sun01Icon : Moon01Icon}
-                size={16}
-              />
+              <HugeiconsIcon icon={theme === "light" ? Sun01Icon : Moon01Icon} size={16} />
               <span className="flex-1">Theme</span>
-              <span className="text-xs capitalize text-muted-foreground">
-                {theme}
-              </span>
+              <span className="text-xs capitalize text-muted-foreground">{theme}</span>
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent side="right" className="w-40">
               <DropdownMenuGroup>
@@ -203,10 +193,7 @@ export function SidebarHeader({
           title={collapsed ? "Show procedures" : "Hide procedures"}
           className="h-8 w-8"
         >
-          <HugeiconsIcon
-            icon={collapsed ? PanelLeftOpenIcon : PanelLeftCloseIcon}
-            size={16}
-          />
+          <HugeiconsIcon icon={collapsed ? PanelLeftOpenIcon : PanelLeftCloseIcon} size={16} />
         </Button>
         <div
           className={

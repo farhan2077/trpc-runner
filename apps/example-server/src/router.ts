@@ -1,6 +1,7 @@
 import { initTRPC } from "@trpc/server";
 import superjson from "superjson";
 import { z } from "zod";
+import * as z4 from "zod/v4";
 
 const t = initTRPC
   .context<{
@@ -17,6 +18,12 @@ const userSchema = z.object({
 });
 
 type User = z.infer<typeof userSchema>;
+
+// Zod 4 schemas with a chained `.input()`, to smoke-test merged forms, BigInt
+// inputs over superjson, and free-form JSON fields.
+const tracedProcedure = t.procedure.input(
+  z4.object({ traceId: z4.string().optional().describe("Optional trace id.") }),
+);
 
 const users: User[] = [
   { id: "usr_1", name: "Ada Lovelace", role: "admin" },
@@ -92,6 +99,21 @@ export const appRouter = t.router({
         users.push(user);
         return { user, notified: input.notify };
       }),
+  }),
+  debug: t.router({
+    echo: tracedProcedure
+      .meta({ description: "Echo the input back with the runtime type of each field." })
+      .input(
+        z4.object({
+          amount: z4.bigint().describe("Sent as a BigInt through superjson."),
+          level: z4.enum(["low", "high"]),
+          payload: z4.any().describe("Any JSON value."),
+        }),
+      )
+      .mutation(({ input }) => ({
+        input,
+        types: Object.fromEntries(Object.entries(input).map(([key, value]) => [key, typeof value])),
+      })),
   }),
   posts: t.router({
     search: t.procedure

@@ -1,24 +1,70 @@
-import fs from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { AnyTRPCRouter } from "@trpc/server";
 import { createTRPCRunnerManifest } from "./manifest";
+import { loadClientAssets, shouldCacheAssets } from "./assets";
 import type { RunnerBootData, TRPCRunnerOptions } from "../types";
 
-const moduleDir = dirname(fileURLToPath(import.meta.url));
-const clientDirCandidates = [
-  join(moduleDir, "client"),
-  join(moduleDir, "..", "..", "dist", "client"),
-  join(process.cwd(), "dist", "client"),
-];
+export type RunnerPageAssets =
+  /** Embed the client CSS and JS in the page (a single self-contained response). */
+  | { mode: "inline" }
+  /**
+   * Link to content-hashed `runner-<hash>.css`/`.js` files under `baseUrl`, which the
+   * caller must serve (see `express.ts`). `baseUrl` must end with `/`.
+   */
+  | { mode: "external"; baseUrl: string };
 
-let cachedAssets: { js: string; css: string } | null = null;
-let cachedHtml: string | null = null;
+// Keyed by the options object so each mounted runner (each `createTRPCRunner` call)
+// caches its own boot data instead of sharing the first one rendered.
+const cachedBootJson = new WeakMap<object, { title: string; json: string }>();
 
+/**
+ * Renders the runner as one self-contained HTML page with the client CSS and JS
+ * inlined, for use outside the Express middleware.
+ */
 export function renderTRPCRunner<TRouter extends AnyTRPCRouter = AnyTRPCRouter>(
   options: TRPCRunnerOptions<TRouter>,
 ) {
-  if (options.cache && cachedHtml) return cachedHtml;
+  return renderTRPCRunnerPage(options, { mode: "inline" });
+}
+
+export function renderTRPCRunnerPage<TRouter extends AnyTRPCRouter = AnyTRPCRouter>(
+  options: TRPCRunnerOptions<TRouter>,
+  pageAssets: RunnerPageAssets,
+) {
+  const boot = getBootJson(options);
+  const assets = loadClientAssets({ cache: shouldCacheAssets(options) });
+
+  const styles =
+    pageAssets.mode === "inline"
+      ? `<style>${assets.css.text}</style>`
+      : `<link rel="stylesheet" href="${escapeHtml(pageAssets.baseUrl + assets.css.fileName)}" />`;
+  const script =
+    pageAssets.mode === "inline"
+      ? `<script>${assets.js.text}</script>`
+      : `<script src="${escapeHtml(pageAssets.baseUrl + assets.js.fileName)}"></script>`;
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(boot.title)}</title>
+    ${styles}
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>window.__TRPC_RUNNER_DATA__ = ${boot.json};</script>
+    ${script}
+  </body>
+</html>`;
+}
+
+function getBootJson<TRouter extends AnyTRPCRouter = AnyTRPCRouter>(
+  options: TRPCRunnerOptions<TRouter>,
+) {
+  if (options.cache) {
+    const cached = cachedBootJson.get(options);
+    if (cached) return cached;
+  }
 
   const manifest = createTRPCRunnerManifest(options);
   const bootData: RunnerBootData = {
@@ -35,44 +81,10 @@ export function renderTRPCRunner<TRouter extends AnyTRPCRouter = AnyTRPCRouter>(
       defaultTheme: options.defaultTheme,
     },
   };
-  const assets = readClientAssets(shouldCacheAssets(options));
-  const html = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${escapeHtml(manifest.title)}</title>
-    <style>${assets.css}</style>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script>window.__TRPC_RUNNER_DATA__ = ${safeJson(bootData)};</script>
-    <script>${assets.js}</script>
-  </body>
-</html>`;
+  const boot = { title: manifest.title, json: safeJson(bootData) };
 
-  if (options.cache) cachedHtml = html;
-  return html;
-}
-
-function readClientAssets(cacheAssets: boolean) {
-  if (cacheAssets && cachedAssets) return cachedAssets;
-  const clientDir = clientDirCandidates.find((dir) => fs.existsSync(join(dir, "runner.js")));
-  if (!clientDir) {
-    throw new Error("Unable to locate trpc-runner client assets. Run the package build first.");
-  }
-  const assets = {
-    js: fs.readFileSync(join(clientDir, "runner.js"), "utf8"),
-    css: fs.readFileSync(join(clientDir, "runner.css"), "utf8"),
-  };
-  if (cacheAssets) cachedAssets = assets;
-  return assets;
-}
-
-function shouldCacheAssets<TRouter extends AnyTRPCRouter = AnyTRPCRouter>(
-  options: TRPCRunnerOptions<TRouter>,
-) {
-  return Boolean(options.cache || process.env.NODE_ENV === "production");
+  if (options.cache) cachedBootJson.set(options, boot);
+  return boot;
 }
 
 function safeJson(value: unknown) {
