@@ -139,9 +139,11 @@ Run the smoke-test app:
 pnpm --filter @trpc-runner/example-server dev
 ```
 
-Open `http://localhost:9999/runner` in browser
+Open `http://localhost:9999/runner` in a browser. If port `9999` is busy, set another one, for example `PORT=3888 pnpm --filter @trpc-runner/example-server dev`.
 
-For live client UI development, also run the client bundle watcher in separate terminals:
+The example router covers the main runner features: `users.*` and `posts.search` use Zod 3 schemas with enums, defaults, and descriptions, and `debug.echo` uses Zod 4 with a chained `.input()`, a BigInt field sent through superjson, and a free-form JSON field.
+
+For live client UI development, also run the client bundle watcher in a separate terminal:
 
 ```sh
 pnpm --filter trpc-runner dev:client
@@ -149,7 +151,11 @@ pnpm --filter trpc-runner dev:client
 
 Then refresh `/runner` after editing files in `packages/trpc-runner/src/client`.
 
-`apps/example-server` imports `trpc-runner/express` through the package export, so it serves built assets from `packages/trpc-runner/dist`. Client edits are visible after `dev:client` rebuilds `dist/client/runner.js` and `dist/client/runner.css`. Server-side package edits still require a rebuild and one `pnpm dev` restart.
+`apps/example-server` imports `trpc-runner/express` through the package export, so it serves built assets from `packages/trpc-runner/dist`. Client edits are visible after `dev:client` rebuilds `dist/client/runner.js` and `dist/client/runner.css`; the refreshed page picks up the new content-hashed asset URLs without a server restart. Server-side package edits still require a rebuild and one `pnpm dev` restart.
+
+Use `pnpm run build` rather than `build:server` on its own: the server build cleans all of `dist`, including the built client.
+
+The repository also includes `.claude/launch.json`, which lets the Claude Code desktop app start the example server on port `3888` for its preview browser.
 
 ## Validation
 
@@ -159,6 +165,14 @@ Run the main checks from the repo root:
 pnpm run format
 pnpm run lint
 pnpm --filter trpc-runner typecheck
-pnpm test
 pnpm run build
+pnpm test
+```
+
+Build before running the tests: the rendering and bundle tests read the built client in `packages/trpc-runner/dist/client`. The bundle tests check that it contains only `runner.js` and `runner.css`, inlines Monaco's workers, bundles its fonts, and has no browser-unsafe `process` references.
+
+Client tests run in jsdom with Testing Library. For a coverage report (a text summary plus `packages/trpc-runner/coverage/index.html`), run:
+
+```sh
+pnpm --filter trpc-runner test:coverage
 ```
