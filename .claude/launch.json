@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "example-server",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@trpc-runner/example-server", "dev"],
+      "env": { "PORT": "3888" },
+      "port": 3888
+    }
+  ]
+}
